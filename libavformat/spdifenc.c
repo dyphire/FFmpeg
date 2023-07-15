@@ -684,6 +684,9 @@ static int spdif_header_truehd(AVFormatContext *s, AVPacket *pkt)
         if (padding_remaining < 0 || padding_remaining > max_padding_per_packet) {
             avpriv_request_sample(s, "Unusual frame timing: %"PRIu16" => %"PRIu16", %d samples/frame",
                                   ctx->truehd_prev_time, input_timing, ctx->truehd_samples_per_frame);
+            ctx->hd_buf_idx = 0;
+            ctx->hd_buf_sent_idx = 0;
+            ctx->hd_buf_filled = 0;
             padding_remaining = 0;
         }
     }
@@ -784,7 +787,7 @@ static int spdif_header_truehd(AVFormatContext *s, AVPacket *pkt)
          av_log(s, AV_LOG_TRACE, "TrueHD frame inserted, total size %d, buffer position %d\n",
                 total_frame_size, ctx->hd_buf_filled);
 
-    if (!have_pkt) {
+    if (ctx->hd_buf_sent_idx == ctx->hd_buf_idx) {
         ctx->pkt_offset = 0;
         return 0;
     }
