@@ -81,6 +81,7 @@ typedef struct IEC61937Context {
 
     int use_preamble;               ///< preamble enabled (disabled for exactly pre-padded DTS)
     int extra_bswap;                ///< extra bswap for payload (for LE DTS => standard BE DTS)
+    int more_bursts_needed;         ///< more bursts needed for the same AVPacket
 
     uint8_t *hd_buf[HD_BUF_COUNT];  ///< allocated buffers to concatenate hd audio frames
     int hd_buf_size;                ///< size of the hd audio buffer (eac3, dts4)
@@ -738,6 +739,15 @@ static int spdif_header_truehd(AVFormatContext *s, AVPacket *pkt)
             /* count the remainder of the code as part of frame size */
             if (code_len_remaining)
                 total_frame_size += code_len_remaining;
+
+                if (have_pkt && padding_remaining) {
+                 /*
+                  * We already have a full burst but padding still remains,
+                  * write out the current burst and ask us to be called again
+                  * via ctx->more_bursts_needed to avoid filling our buffers.
+                  */
+                 break;
+             }
         }
 
         if (padding_remaining) {
@@ -765,9 +775,14 @@ static int spdif_header_truehd(AVFormatContext *s, AVPacket *pkt)
 
     ctx->truehd_prev_size = total_frame_size;
     ctx->truehd_prev_time = input_timing;
+    ctx->truehd_padding_remaining = padding_remaining;
 
-    av_log(s, AV_LOG_TRACE, "TrueHD frame inserted, total size %d, buffer position %d\n",
-           total_frame_size, ctx->hd_buf_filled);
+    if (padding_remaining)
+         av_log(s, AV_LOG_TRACE, "TrueHD frame not yet inserted, %d bytes more padding needed\n",
+                padding_remaining);
+     else
+         av_log(s, AV_LOG_TRACE, "TrueHD frame inserted, total size %d, buffer position %d\n",
+                total_frame_size, ctx->hd_buf_filled);
 
     if (!have_pkt) {
         ctx->pkt_offset = 0;
@@ -833,7 +848,7 @@ static av_always_inline void spdif_put_16(IEC61937Context *ctx,
         avio_wl16(pb, val);
 }
 
-static int spdif_write_packet(struct AVFormatContext *s, AVPacket *pkt)
+static int spdif_write_burst(AVFormatContext *s, AVPacket *pkt)
 {
     IEC61937Context *ctx = s->priv_data;
     int ret, padding;
@@ -843,6 +858,7 @@ static int spdif_write_packet(struct AVFormatContext *s, AVPacket *pkt)
     ctx->length_code = FFALIGN(pkt->size, 2) << 3;
     ctx->use_preamble = 1;
     ctx->extra_bswap = 0;
+    ctx->more_bursts_needed = 0;
 
     ret = ctx->header_info(s, pkt);
     if (ret < 0)
@@ -904,6 +920,18 @@ static int spdif_write_packet(struct AVFormatContext *s, AVPacket *pkt)
            ctx->data_type, ctx->out_bytes, ctx->pkt_offset);
 
     return 0;
+}
+
+static int spdif_write_packet(AVFormatContext *s, AVPacket *pkt)
+{
+     IEC61937Context *ctx = s->priv_data;
+     int ret = 0;
+
+     ctx->more_bursts_needed = 1;
+     while (ctx->more_bursts_needed && ret == 0)
+         ret = spdif_write_burst(s, pkt);
+
+     return ret;
 }
 
 const FFOutputFormat ff_spdif_muxer = {
