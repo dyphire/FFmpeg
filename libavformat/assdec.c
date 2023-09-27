@@ -124,6 +124,7 @@ static int ass_read_header(AVFormatContext *s)
     av_bprint_init(&rline,  0, AV_BPRINT_SIZE_UNLIMITED);
 
     ass->q.keep_duplicates = 1;
+    ass->q.keep_negative_dur = 1;
 
     for (;;) {
         int64_t pos = get_line(&line, &tr);
