@@ -35,7 +35,7 @@ typedef struct ASSContext {
 
 static int ass_probe(const AVProbeData *p)
 {
-    char buf[13];
+    char buf[1000];
     FFTextReader tr;
     ff_text_init_buf(&tr, p->buf, p->buf_size);
 
@@ -44,7 +44,7 @@ static int ass_probe(const AVProbeData *p)
 
     ff_text_read(&tr, buf, sizeof(buf));
 
-    if (!memcmp(buf, "[Script Info]", 13))
+    if (strstr(buf, "[Script Info]") || strstr(buf, "[V4 Styles]") || strstr(buf, "[V4+ Styles]"))
         return AVPROBE_SCORE_MAX;
 
     return 0;
