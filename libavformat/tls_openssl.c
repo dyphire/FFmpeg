@@ -667,6 +667,7 @@ static av_cold int openssl_init_ca_key_cert(URLContext *h)
             av_log(h, AV_LOG_WARNING, "Failure setting default verify locations: %s\n",
                 openssl_get_error(c));
         }
+        #endif
     }
 
     if (s->cert_file) {
